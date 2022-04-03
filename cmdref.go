@@ -49,8 +49,8 @@ type Command struct {
 }
 
 func (cmd Command) String() string {
-	return fmt.Sprintf("\nName: %s\nCommand: %s\nDescription: %s\nPlatform: %s\n",
-		cmd.Name, cmd.Command, cmd.Description, cmd.Platform)
+	return fmt.Sprintf("\nName: %s\nDescription: %s\nPlatform: %s\nCommand:\n%s\n",
+		cmd.Name, cmd.Description, cmd.Platform, cmd.Command)
 }
 
 const CmdDirName = "cmdref"
@@ -116,6 +116,8 @@ func DeleteHandler(cmdMap map[string]Command) (map[string]Command, error) {
 		return nil, err
 	}
 
+	fmt.Println(cmdMap[selection])
+
 	confirm, err := prompter.PromptConfirm(fmt.Sprintf("Are you sure you want to delete '%s'", selection))
 	if err != nil {
 		return nil, fmt.Errorf("error while prompting delete confirmation - %v\n", err)
@@ -142,7 +144,7 @@ func ViewHandler(cmdMap map[string]Command) error {
 		return err
 	}
 	cmd := cmdMap[selectedItem]
-	fmt.Print(cmd)
+	fmt.Println(cmd)
 	return nil
 }
 
