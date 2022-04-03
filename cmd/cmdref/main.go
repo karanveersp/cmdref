@@ -10,6 +10,7 @@ import (
 
 func main() {
 	cmdFile, err := cmdref.CmdFilePath()
+	fmt.Printf("Commands file: %s\n", cmdFile)
 	if err != nil {
 		log.Fatal(err)
 	}
