@@ -10,7 +10,7 @@ A cli command reference storage and query app. Use it to
 ## Install
 
 ```
-go install github.com/karanveersp/cmdref
+go install github.com/karanveersp/cmdref/cmd/cmdref
 ```
 
 TODO:
