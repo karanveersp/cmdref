@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	cmdref "github.com/karanveersp/cmdref/internal"
+	"github.com/karanveersp/cmdref/internal/cmdref"
 )
 
 func main() {

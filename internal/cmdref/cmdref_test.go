@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	cmdref "github.com/karanveersp/cmdref/internal"
+	"github.com/karanveersp/cmdref/internal/cmdref"
 
 	"github.com/stretchr/testify/mock"
 )
