@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/karanveersp/cmdref/prompter"
 
@@ -199,14 +200,18 @@ func ViewHandler(cmdMap map[string]Command) error {
 		return nil
 	}
 	var entries []string
+	entryToCommandName := make(map[string]string)
 	for name := range cmdMap {
-		entries = append(entries, name)
+		entryName := fmt.Sprintf("%s - %s", cmdMap[name].Platform, name)
+		entries = append(entries, entryName)
+		entryToCommandName[entryName] = name
 	}
+	sort.Strings(entries)
 	selectedItem, err := prompter.PromptSelect("Select a command", entries)
 	if err != nil {
 		return err
 	}
-	cmd := cmdMap[selectedItem]
+	cmd := cmdMap[entryToCommandName[selectedItem]]
 
 	fmt.Printf("Name: %s\nDescription: %s\nPlatform: %s\nCommand:\n", cmd.Name, cmd.Description, cmd.Platform)
 	color.Yellow(cmd.Command)
