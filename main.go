@@ -25,7 +25,6 @@ func main() {
 		}
 		switch action {
 		case cmdref.Exit:
-			fmt.Println("Bye!")
 			finished = true
 		default:
 			cmdMap, err = cmdref.ProcessAction(cmdMap, action, &fileOps)
