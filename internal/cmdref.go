@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/karanveersp/cmdref/prompter"
+	"github.com/karanveersp/cmdref/pkg/prompter"
 
 	"github.com/fatih/color"
 	"github.com/karanveersp/store"
