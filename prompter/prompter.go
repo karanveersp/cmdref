@@ -1,10 +1,12 @@
 package prompter
 
 import (
-	"github.com/AlecAivazis/survey/v2"
 	"strings"
+
+	"github.com/AlecAivazis/survey/v2"
 )
 
+// PromptString asks the user for a string input with the given message.
 func PromptString(msg string) (string, error) {
 	result := ""
 	if !strings.HasSuffix(msg, ":") {
@@ -20,6 +22,7 @@ func PromptString(msg string) (string, error) {
 	return result, nil
 }
 
+// PromptConfirm asks the user a y/n question with the given message.
 func PromptConfirm(msg string) (bool, error) {
 
 	value := false
@@ -33,6 +36,7 @@ func PromptConfirm(msg string) (bool, error) {
 	return value, nil
 }
 
+// PromptSelect asks the user to select an option from the given message and options.
 func PromptSelect(msg string, options []string) (string, error) {
 	choice := ""
 	prompt := &survey.Select{

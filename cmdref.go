@@ -1,25 +1,103 @@
 package cmdref
 
 import (
-	"cmdref/prompter"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/karanveersp/cmdref/prompter"
+
+	"github.com/fatih/color"
+	"github.com/karanveersp/store"
 )
 
+// CmdDirName is the name of the command directory for config storage.
+const CmdDirName = "cmdref"
+
+// CmdFileName is the name of the file for command storage.
+const CmdFileName = "cmdref.json"
+
+// CmdFileOperater defines an interface for saving/loading commands from
+// the commands file.
+// This is needed to create mock operations for unit tests, along with
+// a live implementation for the actual file.
+type CmdFileOperater interface {
+	Load() ([]Command, error)
+	LoadExternal(filepath string) ([]Command, error)
+	Save(commands []Command) error
+	GetFilePath() string
+}
+
+// CmdFileOps implements the CommandsFileOperator for live/side-effectful
+// operations on the commands file.
+type CmdFileOps struct{}
+
+// NewCmdFileOps creates and returns a new file operations struct.
+func NewCmdFileOps() CmdFileOps {
+	// initialize the application dir for the config store.
+	store.Init(CmdDirName)
+	return CmdFileOps{}
+}
+
+// Load parses the commands file and returns the list of commands.
+func (f *CmdFileOps) Load() ([]Command, error) {
+	var cmds []Command
+	err := store.Load(CmdFileName, &cmds)
+	if err != nil {
+		return nil, err
+	}
+	return cmds, nil
+}
+
+// LoadExternal parses the commands file and returns the list of commands.
+func (f *CmdFileOps) LoadExternal(filepath string) ([]Command, error) {
+	var cmds []Command
+	provider := func() ([]byte, error) {
+		data, err := os.ReadFile(filepath)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+	cmds, err := parseCommands(provider)
+	if err != nil {
+		return nil, err
+	}
+	return cmds, nil
+}
+
+// Save writes the list of commands to the commands file.
+func (f *CmdFileOps) Save(commands []Command) error {
+	return store.Save(CmdFileName, &commands)
+}
+
+// GetFilePath returns the absolute path to the commands file.
+func (f *CmdFileOps) GetFilePath() string {
+	cmdStoreDir := store.GetApplicationDirPath()
+	return filepath.Join(cmdStoreDir, CmdFileName)
+}
+
+// Action represents any action supported by the app.
 type Action int
 
 const (
+	// Create action for creating a command
 	Create Action = iota
+	// Update action for updating an existing command
 	Update
+	// Remove action for removing a command
 	Remove
+	// View action for viewing a command
 	View
+	// Import action for importing commands from another file
 	Import
+	// Exit action for quitting the app
 	Exit
 )
 
+// Actions is a list of strings representing all actions.
 var Actions = []string{"Create", "Update", "Remove", "View", "Import", "Exit"}
 
 func toAction(s string) (Action, error) {
@@ -41,6 +119,7 @@ func toAction(s string) (Action, error) {
 	}
 }
 
+// Command represents a command to store and query.
 type Command struct {
 	Name        string `json:"name"`
 	Command     string `json:"command"`
@@ -49,43 +128,25 @@ type Command struct {
 }
 
 func (cmd Command) String() string {
-	return fmt.Sprintf("\nName: %s\nDescription: %s\nPlatform: %s\nCommand:\n%s\n",
+	return fmt.Sprintf("Name: %s\nDescription: %s\nPlatform: %s\nCommand:\n%s\n",
 		cmd.Name, cmd.Description, cmd.Platform, cmd.Command)
 }
 
-const CmdDirName = "cmdref"
-const CmdFileName = "cmdref.json"
-
-func CmdFilePath() (string, error) {
-	d, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	cmdStoreDir := filepath.Join(d, CmdDirName)
-	err = CreateDirIfNotExists(cmdStoreDir)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(cmdStoreDir, CmdFileName), nil
-}
-
-func UpdateFile(cmdsFilePath string, cmdMap map[string]Command) error {
+func updateFile(cmdMap map[string]Command, fileOps CmdFileOperater) error {
 	var commands []Command
 	for _, v := range cmdMap {
 		commands = append(commands, v)
 	}
-	jsonEncoding, err := json.Marshal(commands)
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(cmdsFilePath, jsonEncoding, 0666)
-	if err != nil {
-		return err
-	}
-	return nil
+	return fileOps.Save(commands)
 }
 
+// UpdateHandler handles the update action.
 func UpdateHandler(cmdMap map[string]Command) (map[string]Command, error) {
+	if len(cmdMap) == 0 {
+		fmt.Println("No existing commands.")
+		return cmdMap, nil
+	}
+
 	entries := keys[Command](cmdMap)
 
 	selection, err := prompter.PromptSelect("Select a command to update", entries)
@@ -105,6 +166,7 @@ func UpdateHandler(cmdMap map[string]Command) (map[string]Command, error) {
 	return newMap, nil
 }
 
+// DeleteHandler handles the delete action.
 func DeleteHandler(cmdMap map[string]Command) (map[string]Command, error) {
 	entries := keys[Command](cmdMap)
 	if len(cmdMap) == 0 {
@@ -120,7 +182,7 @@ func DeleteHandler(cmdMap map[string]Command) (map[string]Command, error) {
 
 	confirm, err := prompter.PromptConfirm(fmt.Sprintf("Are you sure you want to delete '%s'", selection))
 	if err != nil {
-		return nil, fmt.Errorf("error while prompting delete confirmation - %v\n", err)
+		return nil, fmt.Errorf("error while prompting delete confirmation - %v", err)
 	}
 
 	if confirm {
@@ -130,6 +192,7 @@ func DeleteHandler(cmdMap map[string]Command) (map[string]Command, error) {
 
 }
 
+// ViewHandler handles viewing commands.
 func ViewHandler(cmdMap map[string]Command) error {
 	if len(cmdMap) == 0 {
 		fmt.Println("No existing commands found")
@@ -144,18 +207,22 @@ func ViewHandler(cmdMap map[string]Command) error {
 		return err
 	}
 	cmd := cmdMap[selectedItem]
-	fmt.Println(cmd)
+
+	fmt.Printf("Name: %s\nDescription: %s\nPlatform: %s\nCommand:\n", cmd.Name, cmd.Description, cmd.Platform)
+	color.Yellow(cmd.Command)
+	fmt.Println()
 	return nil
 }
 
-func ProcessAction(cmdsFilePath string, cmdMap map[string]Command, action Action) (map[string]Command, error) {
+// ProcessAction takes the command file path, command map and an action to invoke the action.
+func ProcessAction(cmdMap map[string]Command, action Action, fileOps CmdFileOperater) (map[string]Command, error) {
 	switch action {
 	case Create:
 		newMap, err := CreateHandler(cmdMap)
 		if err != nil {
 			return nil, err
 		}
-		err = UpdateFile(cmdsFilePath, newMap)
+		err = updateFile(newMap, fileOps)
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +238,7 @@ func ProcessAction(cmdsFilePath string, cmdMap map[string]Command, action Action
 		if err != nil {
 			return nil, err
 		}
-		err = UpdateFile(cmdsFilePath, newMap)
+		err = updateFile(newMap, fileOps)
 		if err != nil {
 			return nil, err
 		}
@@ -181,16 +248,56 @@ func ProcessAction(cmdsFilePath string, cmdMap map[string]Command, action Action
 		if err != nil {
 			return nil, err
 		}
-		err = UpdateFile(cmdsFilePath, newMap)
+		err = updateFile(newMap, fileOps)
 		if err != nil {
 			return nil, err
 		}
-		return newMap, err
+		return newMap, nil
+	case Import:
+		f, err := prompter.PromptString("Enter the absolute file path for the commands you want to import")
+		if err != nil {
+			return nil, err
+		}
+		isMerge, err := prompter.PromptConfirm("Do you want to merge the new commands with existing commands?")
+		if err != nil {
+			return nil, err
+		}
+		cmdMap, err = ImportHandler(f, isMerge, cmdMap, fileOps)
+		if err != nil {
+			return nil, err
+		}
+		err = updateFile(cmdMap, fileOps)
+		if err != nil {
+			return nil, err
+		}
+		return cmdMap, nil
 	default:
 		return nil, errors.New("unrecognized action")
 	}
 }
 
+// ImportHandler loads the commands from the given path, and either merges or
+// replaces the command map with new commands.
+func ImportHandler(fpath string, isMerge bool, cmdMap map[string]Command, fileOps CmdFileOperater) (map[string]Command, error) {
+	newCmds, err := fileOps.LoadExternal(fpath)
+	if err != nil {
+		return nil, err
+	}
+	if isMerge {
+		for _, cmd := range newCmds {
+			cmdMap[cmd.Name] = cmd
+		}
+		return cmdMap, nil
+	}
+	// new map, instead of merge
+	newMap := make(map[string]Command)
+	for _, cmd := range newCmds {
+		newMap[cmd.Name] = cmd
+	}
+	return newMap, nil
+}
+
+// GetSelectedAction returns the action the user chose from the prompt.
 func GetSelectedAction() (Action, error) {
 	action, err := prompter.PromptSelect("Select action", Actions)
 	if err != nil {
@@ -203,6 +310,7 @@ func GetSelectedAction() (Action, error) {
 	return mappedAction, nil
 }
 
+// CreateHandler handles the creation of a new command.
 func CreateHandler(cmdMap map[string]Command) (map[string]Command, error) {
 	cmd, err := createCommand()
 	if err != nil {
@@ -213,14 +321,10 @@ func CreateHandler(cmdMap map[string]Command) (map[string]Command, error) {
 	return newMap, nil
 }
 
-func ParseCommands(cmdProvider func() ([]byte, error)) (map[string]Command, error) {
+// LoadCommands reads existing commands from the commands file.
+func LoadCommands(fileOps CmdFileOperater) (map[string]Command, error) {
 	cmdMap := make(map[string]Command)
-	cmdData, err := cmdProvider()
-	if err != nil {
-		return nil, err
-	}
-	var commands []Command
-	err = json.Unmarshal(cmdData, &commands)
+	commands, err := fileOps.Load()
 	if err != nil {
 		return nil, err
 	}
@@ -230,6 +334,7 @@ func ParseCommands(cmdProvider func() ([]byte, error)) (map[string]Command, erro
 	return cmdMap, nil
 }
 
+// CreateDirIfNotExists creates the given directory if it doesn't exist.
 func CreateDirIfNotExists(dpath string) error {
 	if stat, err := os.Stat(dpath); err == nil && stat.IsDir() {
 		return nil // directory exists
@@ -264,6 +369,7 @@ func keys[T interface{}](m map[string]T) []string {
 	}
 	return entries
 }
+
 func createCommand() (Command, error) {
 	name, err := prompter.PromptString("Command name")
 	if err != nil {
@@ -286,4 +392,19 @@ func createCommandWithName(name string) (Command, error) {
 		return Command{}, err
 	}
 	return Command{Name: name, Command: command, Platform: platform, Description: description}, nil
+}
+
+// parseCommands is a helper function that uses the provider to get
+// json bytes to unmarshall into commands.
+func parseCommands(cmdProvider func() ([]byte, error)) ([]Command, error) {
+	var commands []Command
+	cmdJSON, err := cmdProvider()
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(cmdJSON, &commands)
+	if err != nil {
+		return nil, err
+	}
+	return commands, nil
 }
